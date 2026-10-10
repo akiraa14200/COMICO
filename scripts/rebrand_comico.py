@@ -158,6 +158,32 @@ if guide_path.exists():
             guide_after, _ = remove_item_with_token(guide_after, token)
     write_if_changed(guide_path, guide_before, guide_after, "Removed Getting Started guide onboarding item")
 
+# Remove the Getting Started guide panel from onboarding while preserving backup restore.
+rel = "app/src/main/java/eu/kanade/presentation/more/onboarding/GuidesStep.kt"
+path, text = read(rel)
+before = text
+guide_block = """            Text(stringResource(MR.strings.onboarding_guides_new_user, stringResource(MR.strings.app_name)))
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { handler.openUri(GETTING_STARTED_URL) },
+            ) {
+                Text(stringResource(MR.strings.getting_started_guide))
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+
+"""
+if guide_block in text:
+    text = text.replace(guide_block, "", 1)
+text = text.replace("import androidx.compose.material3.HorizontalDivider\\n", "")
+text = text.replace("import androidx.compose.ui.platform.LocalUriHandler\\n", "")
+text = text.replace("        val handler = LocalUriHandler.current\\n\\n", "")
+text = text.replace('const val GETTING_STARTED_URL = "https://mihon.app/docs/guides/getting-started"\\n', "")
+write_if_changed(path, before, text, "Removed Getting Started guide panel from onboarding")
+
 # Shared app-wide translucent/glass-like Compose theme.
 rel = "app/src/main/java/eu/kanade/presentation/theme/TachiyomiTheme.kt"
 path, text = read(rel)
