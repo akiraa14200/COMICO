@@ -1,0 +1,53 @@
+name: Inspect COMICO source for rebranding
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/inspect-comico.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source archive
+        run: unzip -q COMICO-mihon-source.zip -d source
+      - name: Locate branding, menus, and theme implementation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root = Path("source")
+          terms = re.compile(r"starting guide|support us|help|mihon|about|glass.?morph|navigation|drawer", re.I)
+          exts = {".kt", ".kts", ".xml", ".json", ".properties", ".html", ".css", ".txt", ".md"}
+          matches = 0
+          for p in root.rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in exts:
+                  continue
+              try:
+                  lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+              except Exception:
+                  continue
+              found = [(i, line.strip()) for i, line in enumerate(lines, 1) if terms.search(line)]
+              if found:
+                  print(f"\\n### {p}")
+                  for i, line in found[:45]:
+                      print(f"{i}: {line[:260]}")
+                      matches += 1
+          print(f"\\nTOTAL_MATCHED_LINES={matches}")
+          PY
+      - name: Upload source inspection report
+        if: always()
+        run: |
+          find source/mihon-main -type f \( -name '*.kt' -o -name '*.xml' -o -name '*.kts' \) | sort > source-files.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: COMICO-source-inspection
+          path: source-files.txt
+          if-no-files-found: warn
