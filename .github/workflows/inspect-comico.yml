@@ -17,21 +17,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract source
         run: unzip -q COMICO-mihon-source.zip -d source
-      - name: Print onboarding and More screens
+      - name: Print actual onboarding UI
         run: |
           python3 - <<'PY'
           from pathlib import Path
           root = Path("source/mihon-main")
-          targets = [
-              "app/src/main/java/eu/kanade/tachiyomi/ui/more/OnboardingScreen.kt",
-              "app/src/main/java/eu/kanade/presentation/more/MoreScreen.kt",
-          ]
-          for rel in targets:
-              p = root / rel
-              if not p.exists():
-                  print(f"Missing: {rel}")
+          for p in root.rglob("OnboardingScreen.kt"):
+              if "build" in p.parts:
                   continue
-              print(f"\\n### {rel}")
-              for i, line in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+              lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+              print(f"\\n### {p} ({len(lines)} lines)")
+              for i, line in enumerate(lines, 1):
                   print(f"{i}: {line}")
           PY
