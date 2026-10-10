@@ -1,4 +1,4 @@
-name: Inspect COMICO guide and branding references
+name: Inspect COMICO onboarding sections
 
 on:
   workflow_dispatch:
@@ -17,29 +17,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract source
         run: unzip -q COMICO-mihon-source.zip -d source
-      - name: Find guide and branding UI references
+      - name: Print onboarding and More screens
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           root = Path("source/mihon-main")
-          terms = re.compile(r"starting guide|getting started guide|onboarding_guides|label_help|label_support_us|Mihon", re.I)
-          for p in root.rglob("*"):
-              if not p.is_file() or p.suffix.lower() not in {".kt", ".xml", ".json"}:
+          targets = [
+              "app/src/main/java/eu/kanade/tachiyomi/ui/more/OnboardingScreen.kt",
+              "app/src/main/java/eu/kanade/presentation/more/MoreScreen.kt",
+          ]
+          for rel in targets:
+              p = root / rel
+              if not p.exists():
+                  print(f"Missing: {rel}")
                   continue
-              if "build" in p.parts:
-                  continue
-              try:
-                  lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
-              except Exception:
-                  continue
-              hits = [i for i, line in enumerate(lines) if terms.search(line)]
-              if hits:
-                  print(f"\\n### {p}")
-                  emitted = set()
-                  for i in hits[:25]:
-                      for j in range(max(0, i-3), min(len(lines), i+4)):
-                          if j not in emitted:
-                              print(f"{j+1}: {lines[j][:260]}")
-                              emitted.add(j)
+              print(f"\\n### {rel}")
+              for i, line in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+                  print(f"{i}: {line}")
           PY
