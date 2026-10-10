@@ -2,6 +2,7 @@
 """Apply COMICO's UI-only rebrand to the source archive before building.
 
 Internal package names and third-party license notices are intentionally preserved.
+This patch is idempotent so repeated builds are safe.
 """
 from pathlib import Path
 import re
@@ -72,14 +73,15 @@ def remove_function(text, signature):
     return text, False
 
 
-# Remove Support Us and Help from the More screen.
+# More menu: remove Support Us and Help.
 rel = "app/src/main/java/eu/kanade/presentation/more/MoreScreen.kt"
 path, text = read(rel)
 before = text
 for token in ("MR.strings.label_support_us", "MR.strings.label_help"):
-    text, ok = remove_item_with_token(text, token)
-    if not ok:
-        raise SystemExit(f"Could not safely remove {token} from {rel}")
+    if token in text:
+        text, ok = remove_item_with_token(text, token)
+        if not ok:
+            raise SystemExit(f"Could not safely remove {token} from {rel}")
 text = text.replace("    onClickSupport: () -> Unit,\n", "")
 for line in (
     "import androidx.compose.material.icons.automirrored.outlined.HelpOutline\n",
@@ -91,7 +93,7 @@ for line in (
     text = text.replace(line, "")
 write_if_changed(path, before, text, "Removed Support Us and Help entries from More screen")
 
-# Remove the Support Us navigation callback.
+# Remove Support Us navigation.
 rel = "app/src/main/java/eu/kanade/tachiyomi/ui/more/MoreTab.kt"
 path, text = read(rel)
 before = text
@@ -99,7 +101,7 @@ text = text.replace("import mihon.feature.support.SupportUsScreen\n", "")
 text = text.replace("            onClickSupport = { navigator.push(SupportUsScreen()) },\n", "")
 write_if_changed(path, before, text, "Removed Support Us navigation callback")
 
-# Remove the startup donation campaign so it no longer appears as a prompt.
+# Remove the startup donation campaign.
 rel = "app/src/main/java/eu/kanade/tachiyomi/ui/main/MainActivity.kt"
 path, text = read(rel)
 before = text
@@ -108,7 +110,7 @@ text, _ = remove_function(text, "private fun ShowDonationCampaign()")
 text = text.replace("import mihon.feature.support.SupportUsScreen\n", "")
 write_if_changed(path, before, text, "Removed startup Support Us campaign")
 
-# Rebrand About and remove old Mihon website/social destinations.
+# COMICO About branding; remove Mihon-specific privacy and social destinations.
 rel = "app/src/main/java/eu/kanade/presentation/more/settings/screen/about/AboutScreen.kt"
 path, text = read(rel)
 before = text
@@ -123,13 +125,15 @@ new_brand = """                item {
                         subtitle = "Brand",
                     )
                 }"""
-if old_logo not in text:
+if old_logo in text:
+    text = text.replace(old_logo, new_brand, 1)
+elif 'title = "COMICO"' not in text:
     raise SystemExit("Could not locate About screen brand header")
-text = text.replace(old_logo, new_brand, 1)
-text, privacy_removed = remove_item_with_token(text, "MR.strings.privacy_policy")
-text, links_removed = remove_item_with_token(text, "LinkIcon(")
-if not privacy_removed or not links_removed:
-    raise SystemExit("Could not safely remove legacy About links")
+for token in ("MR.strings.privacy_policy", "LinkIcon("):
+    if token in text:
+        text, ok = remove_item_with_token(text, token)
+        if not ok:
+            raise SystemExit(f"Could not safely remove legacy About entry: {token}")
 for line in (
     "import eu.kanade.presentation.more.LogoHeader\n",
     "import tachiyomi.core.common.Constants\n",
@@ -144,17 +148,17 @@ for line in (
     text = text.replace(line, "")
 write_if_changed(path, before, text, "Rebranded About screen as COMICO and removed Mihon links")
 
-# Remove the Getting Started guide if it is a standalone onboarding list item.
-guide_rel = "app/src/main/java/eu/kanade/tachiyomi/ui/more/OnboardingScreen.kt"
-guide_path = root / guide_rel
+# Remove a standalone onboarding guide item if present.
+guide_path = root / "app/src/main/java/eu/kanade/tachiyomi/ui/more/OnboardingScreen.kt"
 if guide_path.exists():
     guide_before = guide_path.read_text(encoding="utf-8")
-    guide_after, guide_removed = remove_item_with_token(guide_before, "onboarding_guides_new_user")
-    if guide_removed:
-        guide_after, _ = remove_item_with_token(guide_after, "onboarding_guides_returning_user")
-        write_if_changed(guide_path, guide_before, guide_after, "Removed Getting Started guide onboarding item")
+    guide_after = guide_before
+    for token in ("onboarding_guides_new_user", "onboarding_guides_returning_user"):
+        if token in guide_after:
+            guide_after, _ = remove_item_with_token(guide_after, token)
+    write_if_changed(guide_path, guide_before, guide_after, "Removed Getting Started guide onboarding item")
 
-# Apply a shared translucent glass-like surface treatment through the app-wide Compose theme.
+# Shared app-wide translucent/glass-like Compose theme.
 rel = "app/src/main/java/eu/kanade/presentation/theme/TachiyomiTheme.kt"
 path, text = read(rel)
 before = text
@@ -217,12 +221,13 @@ new_theme = """    val baseColorScheme = remember(appTheme, isDark, isAmoled) {
             content()
         }
     }"""
-if old_theme not in text:
+if old_theme in text:
+    text = text.replace(old_theme, new_theme, 1)
+elif "val glassColorScheme = remember(baseColorScheme)" not in text:
     raise SystemExit("Could not locate shared theme block for glassmorphic styling")
-text = text.replace(old_theme, new_theme, 1)
 write_if_changed(path, before, text, "Added shared glassmorphic theme treatment")
 
-# Update only an explicit app display-name string; leave internal namespaces and license notices intact.
+# Change only explicit Android app-name strings, not packages or license notices.
 for path in (root / "app/src/main/res").rglob("strings.xml"):
     before = path.read_text(encoding="utf-8", errors="ignore")
     after = re.sub(
@@ -236,5 +241,5 @@ for path in (root / "app/src/main/res").rglob("strings.xml"):
 print("COMICO source modifications:")
 for change in changes:
     print(f"- {change}")
-if len(changes) < 4:
-    raise SystemExit("Too few source changes were applied; refusing to build/commit.")
+if not changes:
+    print("Source already has the COMICO patch; no changes needed.")
