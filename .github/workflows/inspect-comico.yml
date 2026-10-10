@@ -17,37 +17,31 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract source archive
         run: unzip -q COMICO-mihon-source.zip -d source
-      - name: Locate branding, menus, and theme implementation
+      - name: Print exact UI labels and likely implementation files
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
-          root = Path("source")
-          terms = re.compile(r"starting guide|support us|help|mihon|about|glass.?morph|navigation|drawer", re.I)
-          exts = {".kt", ".kts", ".xml", ".json", ".properties", ".html", ".css", ".txt", ".md"}
-          matches = 0
-          for p in root.rglob("*"):
-              if not p.is_file() or p.suffix.lower() not in exts:
+          root = Path("source/mihon-main")
+          exact = re.compile(r"Starting Guide|Support Us|label_support_us|pref_category_about|About|Help|mihon\.app|Mihon", re.I)
+          for base in [root / "app/src/main", root / "i18n/src/commonMain/moko-resources/base"]:
+              if not base.exists():
                   continue
-              try:
-                  lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
-              except Exception:
-                  continue
-              found = [(i, line.strip()) for i, line in enumerate(lines, 1) if terms.search(line)]
-              if found:
-                  print(f"\\n### {p}")
-                  for i, line in found[:45]:
-                      print(f"{i}: {line[:260]}")
-                      matches += 1
-          print(f"\\nTOTAL_MATCHED_LINES={matches}")
+              for p in base.rglob("*"):
+                  if not p.is_file() or p.suffix.lower() not in {".kt", ".kts", ".xml", ".json", ".properties"}:
+                      continue
+                  try:
+                      lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+                  except Exception:
+                      continue
+                  hits = [(i, line.strip()) for i, line in enumerate(lines, 1) if exact.search(line)]
+                  if hits:
+                      print(f"\\n### {p}")
+                      for i, line in hits[:35]:
+                          print(f"{i}: {line[:300]}")
+          print("\\n### APP SOURCE FILES (navigation/theme/about candidates)")
+          for p in sorted((root / "app/src/main").rglob("*.kt")):
+              rel = str(p.relative_to(root))
+              if any(k in rel.lower() for k in ("settings", "about", "navigation", "theme", "mainactivity", "screen")):
+                  print(rel)
           PY
-      - name: Upload source inspection report
-        if: always()
-        run: |
-          find source/mihon-main -type f \( -name '*.kt' -o -name '*.xml' -o -name '*.kts' \) | sort > source-files.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: COMICO-source-inspection
-          path: source-files.txt
-          if-no-files-found: warn
