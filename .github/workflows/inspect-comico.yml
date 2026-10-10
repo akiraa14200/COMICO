@@ -17,12 +17,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract source
         run: unzip -q COMICO-mihon-source.zip -d source
-      - name: Print actual onboarding UI
+      - name: Print guide step implementation
         run: |
           python3 - <<'PY'
           from pathlib import Path
           root = Path("source/mihon-main")
-          for p in root.rglob("OnboardingScreen.kt"):
+          for p in root.rglob("GuidesStep.kt"):
               if "build" in p.parts:
                   continue
               lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
